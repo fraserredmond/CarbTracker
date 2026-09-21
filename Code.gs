@@ -38,14 +38,18 @@ function doPost(evt) {
     if (!secret || reqObj.secret !== secret) {
       outObj = { ok: false, error: 'BAD_SECRET' };
     } else {
-      const lock = LockService.getScriptLock();
-      lock.waitLock(20000);
-      try {
-        if (reqObj.action === 'fetch') outObj = fetchPayload_(reqObj);
-        else if (reqObj.action === 'save') outObj = saveMeal_(reqObj);
-        else outObj = { ok: false, error: 'BAD_ACTION' };
-      } finally {
-        lock.releaseLock();
+      if (reqObj.action === 'fetch') {
+        outObj = fetchPayload_(reqObj); // Read-only, so it doesn't queue behind (or hold up) a save.
+      } else if (reqObj.action === 'save') {
+        const lock = LockService.getScriptLock();
+        lock.waitLock(20000);
+        try {
+          outObj = saveMeal_(reqObj);
+        } finally {
+          lock.releaseLock();
+        }
+      } else {
+        outObj = { ok: false, error: 'BAD_ACTION' };
       }
     }
   } catch (err) {
@@ -196,11 +200,7 @@ function saveMeal_(reqObj) {
   const valuesAoa = foodsArr.map((food, i) => [
     (i === 0) ? dateSerialNum : '',
     (i === 0) ? mealObj.meal : '',
-    String(food.name).trim(),
-    numOrBlank_(food.carbsPer100g) === '' ? numOrBlank_(food.carbs) : '',
-    numOrBlank_(food.carbsPer100g),
-    numOrBlank_(food.carbsPer100g) === '' ? '' : numOrBlank_(food.weightG),
-  ]);
+  ].concat(foodCells_(food)));
   sheet.getRange(rowNum, 1, valuesAoa.length, DATA_COLS_NUM).setValues(valuesAoa);
   sheet.getRange(rowNum, 1).setNumberFormat(DATE_NUMBER_FORMAT);
   SpreadsheetApp.flush();
@@ -249,12 +249,30 @@ function findLogRowNum_(logSheet, id) {
   return (idx < 0) ? 0 : idx + 2;
 }
 
-/** True when the rows starting at `rowNum` hold this meal: the meal type on the first row and the same food names in order. */
+/** Columns C–F for one food, exactly as they're written to a month sheet: Food, Carbs, Carbs/100g, Weight (g). */
+function foodCells_(food) {
+  const per100 = numOrBlank_(food.carbsPer100g);
+  return [
+    String(food.name).trim(),
+    (per100 === '') ? numOrBlank_(food.carbs) : '',
+    per100,
+    (per100 === '') ? '' : numOrBlank_(food.weightG),
+  ];
+}
+
+/**
+ * True when the rows starting at `rowNum` hold this meal: the meal type on the first row, then every food with the
+ * same name AND the same numbers. Names alone aren't enough: two phones can save the same template foods.
+ */
 function isMealAtRow_(sheet, rowNum, mealName, foodsArr) {
   if (rowNum + foodsArr.length - 1 > sheet.getMaxRows()) return false;
-  const valuesAoa = sheet.getRange(rowNum, 2, foodsArr.length, 2).getValues();
+  const valuesAoa = sheet.getRange(rowNum, 2, foodsArr.length, 5).getValues(); // B–F.
   if (String(valuesAoa[0][0]).trim() !== mealName) return false;
-  return foodsArr.every((food, i) => String(valuesAoa[i][1]).trim() === String(food.name).trim());
+  return foodsArr.every((food, i) => {
+    const expectedArr = foodCells_(food);
+    const actualArr = [String(valuesAoa[i][1]).trim(), numOrBlank_(valuesAoa[i][2]), numOrBlank_(valuesAoa[i][3]), numOrBlank_(valuesAoa[i][4])];
+    return expectedArr.every((cell, j) => cell === actualArr[j]);
+  });
 }
 
 // --- One-off helpers to run from the editor ---

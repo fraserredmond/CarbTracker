@@ -13,13 +13,17 @@ const RETRY_MAX_MS = 10 * 60 * 1000;
 let retryDelayMs = RETRY_MIN_MS;
 let retryTimeout = 0;
 
-// A record the web app itself keeps rejecting is dropped once it's this old, so it can't block later meals forever.
-// Connection, secret and missing-month-sheet failures never count: those are fixable and say nothing about the record.
+// A record the web app itself keeps rejecting is dropped this long after its FIRST rejection, so it can't block later
+// meals forever. Time spent waiting offline doesn't count, and neither do connection, secret or missing-month-sheet
+// failures: those are fixable and say nothing about the record.
 const DROP_AFTER_MS = 20 * 60 * 60 * 1000;
 const NEVER_DROP_CODES = [`NETWORK`, `BAD_RESPONSE`, `BAD_SECRET`, `NO_URL`, `NO_SHEET`];
 
+/** Notes a rejection on the record (the caller persists it) and says whether the record has now run out of time. */
 function isDroppable(recordObj, code) {
-  return !NEVER_DROP_CODES.includes(code) && (Date.now() - recordObj.createdAt) > DROP_AFTER_MS;
+  if (NEVER_DROP_CODES.includes(code)) return false;
+  recordObj.firstRejectedAt ??= Date.now();
+  return (Date.now() - recordObj.firstRejectedAt) > DROP_AFTER_MS;
 }
 
 function scheduleRetry() {
@@ -79,7 +83,8 @@ export async function sync() {
         await queueDelete(recordObj.id);
         // Until the refresh below returns, the cached payload still names the previous meal. Patch it now.
         const cachedPayload = getPayload();
-        if (cachedPayload) {
+        const isSameMode = Boolean(recordObj.isDevMode ?? settings.isDevMode) === Boolean(cachedPayload?.isDevMode);
+        if (cachedPayload && isSameMode) {
           cachedPayload.lastMeal = { date: recordObj.date, meal: recordObj.meal, totalCarbs: recordObj.totalCarbs };
           setPayload(cachedPayload);
         }

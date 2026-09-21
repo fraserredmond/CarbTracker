@@ -83,7 +83,13 @@ function openDb() {
         db.createObjectStore(STORE_NAME, { keyPath: `id` });
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // The browser can close a connection behind the app's back. Forget it so the next call reopens.
+      db.onclose = () => { dbPromise = null; };
+      db.onversionchange = () => { db.close(); dbPromise = null; };
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
   // A failed open isn't remembered, so the next call gets a fresh try.
@@ -91,9 +97,21 @@ function openDb() {
   return dbPromise;
 }
 
+/** Every operation here is idempotent (getAll, put by key, delete by key), so one retry on a fresh connection is safe. */
 function tx(mode, workFunc) {
+  return runTx(mode, workFunc).catch(() => runTx(mode, workFunc));
+}
+
+function runTx(mode, workFunc) {
   return openDb().then((db) => new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, mode);
+    let transaction;
+    try {
+      transaction = db.transaction(STORE_NAME, mode);
+    } catch (err) {
+      dbPromise = null; // The cached connection is dead.
+      reject(err);
+      return;
+    }
     const store = transaction.objectStore(STORE_NAME);
     const req = workFunc(store);
     transaction.oncomplete = () => resolve(req?.result);

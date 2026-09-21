@@ -56,7 +56,9 @@ function renderBar() {
     return;
   }
   const lastQueued = state.queueArr[state.queueArr.length - 1];
-  const lastMeal = lastQueued ?? state.payload?.lastMeal ?? null;
+  // A payload cached under the other mode describes the other sheet, so its last meal doesn't belong here.
+  const isPayloadForThisMode = Boolean(state.payload?.isDevMode) === Boolean(state.settings.isDevMode);
+  const lastMeal = lastQueued ?? (isPayloadForThisMode ? state.payload?.lastMeal : null) ?? null;
   els.barMealName.textContent = lastMeal ? lastMeal.meal : `No meals yet`;
   els.barTotal.textContent = lastMeal ? formatCarbs(lastMeal.totalCarbs) : `0`;
   els.cancelBtn.hidden = true;
@@ -117,7 +119,7 @@ function showToast(text) {
 function renderHome() {
   state.screen = `home`;
   const homeEl = document.createElement(`div`);
-  homeEl.className = `home hasSuggestion`;
+  homeEl.className = `home`;
   const suggested = suggestedMeal(new Date());
   for (const mealName of MEAL_NAMES) {
     const btnEl = document.createElement(`button`);
@@ -567,6 +569,10 @@ async function init() {
   els.settingsSaveBtn.addEventListener(`click`, saveConnectionSettings);
   els.connectionToggleBtn.addEventListener(`click`, () => setConnectionExpanded(els.connectionFields.hidden));
   els.dialog.addEventListener(`close`, () => window.clearTimeout(settingsCloseTimeout));
+  // Touching the dialog after a successful test means the user isn't done: don't close it under them.
+  for (const type of [`pointerdown`, `keydown`, `input`]) {
+    els.dialog.addEventListener(type, () => window.clearTimeout(settingsCloseTimeout));
+  }
   els.cancelBtn.addEventListener(`click`, () => goHome(true));
   els.saveBtn.addEventListener(`click`, saveCurrentMeal);
   window.addEventListener(`popstate`, () => {
@@ -574,7 +580,12 @@ async function init() {
     saveDraft.flush(); // Leaving with Back keeps the draft, including the last keystrokes. No-op after Save or Cancel.
     renderHome();
   });
-  document.addEventListener(`visibilitychange`, () => { if (document.visibilityState === `visible`) renderHeader(); });
+  document.addEventListener(`visibilitychange`, () => {
+    if (document.visibilityState !== `visible`) return;
+    // An installed app resumes rather than reloads, so the date and the suggested meal can both be hours old.
+    renderHeader();
+    if (state.screen === `home`) renderHome();
+  });
   window.addEventListener(`online`, () => { if (state.screen === `home`) renderBar(); });
   window.addEventListener(`offline`, () => { if (state.screen === `home`) renderBar(); });
 

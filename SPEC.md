@@ -17,7 +17,7 @@ A PWA for logging a meal's foods and carbs into the "Beths carbs" Google Sheet. 
 - Column B validation list is `Breakfast,Lunch,Dinner`. Snack gets added to that list on `Testing`, `Oct 2026`, `Nov 2026`, `Dec 2026`. Fraser adds it to whatever future months are copied from.
 - `Templates` sheet is parsed as-is: column A labels start sections (`Others` = favourites, `Breakfast`, `Lunch`, `Dinner`); each food row has a name in B and either Carbs in C or Carbs/100g in D. Named ranges and `onEdit` keep working for hand entry.
 - `Testing` is a copy of a month sheet used when dev mode is on.
-- `AppLog` sheet: `id | savedAt | date | meal | totalCarbs | sheet | foods | rowNum | status`. The row is logged as `writing` before the month sheet is touched and flipped to `done` after. A repeated id that's `done` returns success without writing again. A repeated id still marked `writing` means the earlier attempt was interrupted: the web app checks whether the rows landed at the logged row, and only writes again if they didn't.
+- `AppLog` sheet: `id | savedAt | date | meal | totalCarbs | sheet | foods | rowNum | status`. The row is logged as `writing` before the month sheet is touched and flipped to `done` after. A repeated id that's `done` returns success without writing again. A repeated id still marked `writing` means the earlier attempt was interrupted: the web app checks whether the rows landed at the logged row (same meal, food names and numbers), and only writes again if they didn't. Only saves take the script lock; fetches are read-only and run alongside.
 - Blood and bolus are out of scope entirely. Columns I and J are never touched.
 
 ## API (web app)
@@ -36,7 +36,7 @@ Shared chrome on every screen:
 - Directly under it, a fixed bar with the meal type and total carbs in the same position on both screens. Home: last saved meal's type and total, plus a status word ("syncing", "queued") when relevant. Meal screen: the current meal's type and running total, plus Cancel and Save. Anchored to the top so the keyboard never hides or moves it.
 - Banners: red if the current month's sheet is missing, yellow if it's after the 20th and next month's is missing. Neither blocks saving. Off in dev mode.
 
-Home screen: three large buttons Breakfast, Lunch, Dinner in the middle, a smaller Snack button below. Highlight by device local time: Lunch for 10:00 ≤ now < 15:00, Breakfast before, Dinner after. Highlight = the others at reduced opacity. Snack is never highlighted.
+Home screen: three large buttons Breakfast, Lunch, Dinner in the middle, a smaller Snack button below. Redrawn whenever the app comes back to the foreground, so the highlight is never hours old. Highlight by device local time: Lunch for 10:00 ≤ now < 15:00, Breakfast before, Dinner after. Highlight = the others at reduced opacity. Snack is never highlighted.
 
 Meal screen:
 
@@ -56,8 +56,8 @@ Settings popup (a `<dialog>`): font size toggle (two root sizes, ~16px and ~20px
 
 - Settings, theme, colour, font, draft, and the cached `GET` payload live in localStorage. Unsent meals live in IndexedDB, one record per meal with a client-generated id. If IndexedDB can't be used, the queue falls back to localStorage so saving still works.
 - Sync runs on app open, on the browser `online` event, and right after each save. A sync requested while one is running reruns straight after. A failed sync retries with a backoff from 15 seconds up to 10 minutes. No Background Sync API.
-- Meals are sent oldest first and a failure stops the run, so order is kept. A meal the web app itself keeps rejecting is dropped once it's 20 hours old so it can't block later meals. Connection, secret, and missing-month-sheet failures never cause a drop.
-- Service worker precaches the app shell so it opens offline. Online it's network-first, falling back to the cache if the network fails or hasn't answered in 3 seconds. After a timeout it serves cached files immediately for 30 seconds, so a slow connection costs one 3-second wait per launch rather than one per file.
+- Meals are sent oldest first and a failure stops the run, so order is kept. A meal the web app itself keeps rejecting is dropped 20 hours after its first rejection so it can't block later meals. Time spent waiting offline doesn't count, and connection, secret, and missing-month-sheet failures never cause a drop. Requests to the web app give up after 45 seconds.
+- Service worker precaches the app shell so it opens offline. Online it's network-first and bypasses the browser's HTTP cache, falling back to its own cache if the network fails or the page hasn't arrived in 3 seconds. The page request sets the mode for the whole load so new and old files never mix: a page from the network makes its files wait up to 10 seconds for the network, a page from the cache takes its files from the cache too. After a timeout the next page request is served from the cache at once for 30 seconds.
 
 ## Misc
 

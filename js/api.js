@@ -12,6 +12,8 @@ export class ApiError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 45000;
+
 export const ERROR_MESSAGES = {
   NO_URL: `Set the web app URL in settings.`,
   BAD_SECRET: `The secret was rejected. Check it in settings.`,
@@ -36,22 +38,30 @@ export async function callWebApp(settings, action, extraObj = {}) {
     sheet: settings.isDevMode ? `Testing` : ``,
     ...extraObj,
   };
-  let res;
-  try {
-    res = await fetch(settings.webAppUrl, {
-      method: `POST`,
-      headers: { 'Content-Type': `text/plain;charset=utf-8` },
-      body: JSON.stringify(bodyObj),
-      redirect: `follow`,
-    });
-  } catch (err) {
-    throw new ApiError(`NETWORK`, String(err));
-  }
+  // Apps Script can take 10 seconds or more, and waits up to 20 for its lock. Beyond this the connection is hung.
+  const controller = new AbortController();
+  const abortTimeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let json;
   try {
-    json = await res.json();
-  } catch {
-    throw new ApiError(`BAD_RESPONSE`);
+    let res;
+    try {
+      res = await fetch(settings.webAppUrl, {
+        method: `POST`,
+        headers: { 'Content-Type': `text/plain;charset=utf-8` },
+        body: JSON.stringify(bodyObj),
+        redirect: `follow`,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      throw new ApiError(`NETWORK`, String(err));
+    }
+    try {
+      json = await res.json();
+    } catch (err) {
+      throw new ApiError(controller.signal.aborted ? `NETWORK` : `BAD_RESPONSE`, String(err));
+    }
+  } finally {
+    window.clearTimeout(abortTimeout);
   }
   if (!json.ok) throw new ApiError(json.error ?? `UNKNOWN`, json.message);
   return json;
