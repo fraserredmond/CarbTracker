@@ -136,7 +136,11 @@ function renderHome() {
 }
 
 function goHome(isClearDraft) {
-  if (isClearDraft) setDraft(null);
+  if (isClearDraft) {
+    // A save still pending from the last keystroke would otherwise write the draft back after it's cleared.
+    saveDraft.cancel();
+    setDraft(null);
+  }
   if (history.state?.screen === `meal`) history.back();
   else renderHome();
 }
@@ -377,9 +381,26 @@ function keepRowsVisible() {
   }
 }
 
+let isSavingMeal = false;
+
 async function saveCurrentMeal() {
+  if (isSavingMeal) return; // A double tap would otherwise queue the meal twice under two ids.
   const namedRowsArr = state.rowsArr.filter((row) => row.name.trim() !== ``);
   if (namedRowsArr.length === 0) { showToast(`Add a food first.`); return; }
+  isSavingMeal = true;
+  els.saveBtn.disabled = true;
+  try {
+    await queueCurrentMeal(namedRowsArr);
+  } catch {
+    showToast(`Couldn't store the meal on this device. It's still on screen, so try Save again.`);
+    if (state.screen === `meal`) renderBar();
+  } finally {
+    isSavingMeal = false;
+  }
+}
+
+/** @param {Array<object>} namedRowsArr */
+async function queueCurrentMeal(namedRowsArr) {
   const foodsArr = namedRowsArr.map((row) => {
     const foodObj = { name: row.name.trim() };
     const per100Num = parseNum(row.carbsPer100g);
@@ -401,6 +422,7 @@ async function saveCurrentMeal() {
     totalCarbs: totalCarbs(namedRowsArr),
     createdAt: Date.now(),
     attempts: 0,
+    isDevMode: state.settings.isDevMode,
   };
   await queuePut(recordObj);
   state.queueArr = await queueAll();
@@ -547,7 +569,11 @@ async function init() {
   els.dialog.addEventListener(`close`, () => window.clearTimeout(settingsCloseTimeout));
   els.cancelBtn.addEventListener(`click`, () => goHome(true));
   els.saveBtn.addEventListener(`click`, saveCurrentMeal);
-  window.addEventListener(`popstate`, () => { if (state.screen === `meal`) renderHome(); });
+  window.addEventListener(`popstate`, () => {
+    if (state.screen !== `meal`) return;
+    saveDraft.flush(); // Leaving with Back keeps the draft, including the last keystrokes. No-op after Save or Cancel.
+    renderHome();
+  });
   document.addEventListener(`visibilitychange`, () => { if (document.visibilityState === `visible`) renderHeader(); });
   window.addEventListener(`online`, () => { if (state.screen === `home`) renderBar(); });
   window.addEventListener(`offline`, () => { if (state.screen === `home`) renderBar(); });
@@ -555,6 +581,10 @@ async function init() {
   syncEvents.addEventListener(`queue`, onSyncChanged);
   syncEvents.addEventListener(`payload`, onSyncChanged);
   syncEvents.addEventListener(`state`, onSyncChanged);
+  syncEvents.addEventListener(`dropped`, (evt) => {
+    onSyncChanged();
+    showToast(`Gave up on a ${evt.detail.recordObj.meal} from ${evt.detail.recordObj.date} the spreadsheet kept rejecting.`);
+  });
   syncEvents.addEventListener(`error`, (evt) => {
     onSyncChanged();
     const code = evt.detail.code;
@@ -566,7 +596,11 @@ async function init() {
 
   // A reload while on the meal screen lands on home; the draft survives for the next tap.
   if (history.state?.screen === `meal`) history.replaceState(null, ``);
-  state.queueArr = await queueAll();
+  try {
+    state.queueArr = await queueAll();
+  } catch {
+    state.queueArr = []; // Never let storage trouble leave a blank screen.
+  }
   renderHeader();
   renderHome();
   sync();

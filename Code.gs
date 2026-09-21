@@ -20,6 +20,10 @@ const FIRST_DATA_ROW_NUM = 2;
 const DATA_COLS_NUM = 6; // A–F: Date, Meal, Food, Carbs, Carbs/100g, Weight (g).
 const CARBS_FORMULA_COL_NUM = 7; // G: "= Carbs". Its formula marks how far down the month sheet is usable.
 const DATE_NUMBER_FORMAT = 'ddd", "d" "mmm" "';
+const LOG_HEADERS = ['id', 'savedAt', 'date', 'meal', 'totalCarbs', 'sheet', 'foods', 'rowNum', 'status'];
+const LOG_STATUS_COL_NUM = 9;
+const LOG_STATUS_WRITING = 'writing';
+const LOG_STATUS_DONE = 'done';
 const SNACK_DROPDOWN_SHEET_NAMES = ['Testing', 'Oct 2026', 'Nov 2026', 'Dec 2026'];
 
 function doGet() {
@@ -155,7 +159,20 @@ function saveMeal_(reqObj) {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const logSheet = getOrCreateLogSheet_(ss);
-  if (isAlreadyLogged_(logSheet, mealObj.id)) return { ok: true, isDuplicate: true };
+
+  // The log row is written as "writing" before the month sheet is touched and flipped to "done" after. So a
+  // repeated id is either finished (nothing to do) or was interrupted, in which case look whether the rows landed.
+  let logRowNum = findLogRowNum_(logSheet, mealObj.id);
+  if (logRowNum) {
+    const logRow = logSheet.getRange(logRowNum, 1, 1, LOG_HEADERS.length).getValues()[0];
+    if (String(logRow[LOG_STATUS_COL_NUM - 1]) !== LOG_STATUS_WRITING) return { ok: true, isDuplicate: true };
+    const prevSheet = ss.getSheetByName(String(logRow[5]));
+    const prevRowNum = Number(logRow[7]);
+    if (prevSheet && prevRowNum >= FIRST_DATA_ROW_NUM && isMealAtRow_(prevSheet, prevRowNum, mealObj.meal, foodsArr)) {
+      logSheet.getRange(logRowNum, LOG_STATUS_COL_NUM).setValue(LOG_STATUS_DONE);
+      return { ok: true, isDuplicate: true, isRecovered: true };
+    }
+  }
 
   const sheetName = reqObj.sheet || monthSheetName_(parseYmd_(mealObj.date));
   const sheet = ss.getSheetByName(sheetName);
@@ -163,6 +180,17 @@ function saveMeal_(reqObj) {
 
   const rowNum = nextFreeRowNum_(sheet);
   if (!hasFormulaRows_(sheet, rowNum, foodsArr.length)) return { ok: false, error: 'NO_ROOM', sheetName };
+
+  const totalNum = foodsArr.reduce((sumNum, food) => sumNum + foodCarbs_(food), 0);
+  const foodsSummary = foodsArr.map((food) => food.name + ' ' + Math.round(foodCarbs_(food)) + 'g').join(', ');
+  const logValuesArr = [mealObj.id, new Date(), mealObj.date, mealObj.meal, totalNum, sheetName, foodsSummary, rowNum, LOG_STATUS_WRITING];
+  if (logRowNum) {
+    logSheet.getRange(logRowNum, 1, 1, LOG_HEADERS.length).setValues([logValuesArr]);
+  } else {
+    logSheet.appendRow(logValuesArr);
+    logRowNum = logSheet.getLastRow();
+  }
+  SpreadsheetApp.flush();
 
   const dateSerialNum = ymdToSerial_(mealObj.date);
   const valuesAoa = foodsArr.map((food, i) => [
@@ -175,10 +203,9 @@ function saveMeal_(reqObj) {
   ]);
   sheet.getRange(rowNum, 1, valuesAoa.length, DATA_COLS_NUM).setValues(valuesAoa);
   sheet.getRange(rowNum, 1).setNumberFormat(DATE_NUMBER_FORMAT);
+  SpreadsheetApp.flush();
 
-  const totalNum = foodsArr.reduce((sumNum, food) => sumNum + foodCarbs_(food), 0);
-  const foodsSummary = foodsArr.map((food) => food.name + ' ' + Math.round(foodCarbs_(food)) + 'g').join(', ');
-  logSheet.appendRow([mealObj.id, new Date(), mealObj.date, mealObj.meal, totalNum, sheetName, foodsSummary]);
+  logSheet.getRange(logRowNum, LOG_STATUS_COL_NUM).setValue(LOG_STATUS_DONE);
 
   return { ok: true, sheetName, rowNum, totalCarbs: totalNum };
 }
@@ -205,17 +232,29 @@ function getOrCreateLogSheet_(ss) {
   if (!sheet) {
     sheet = ss.insertSheet(APP_LOG_SHEET_NAME);
   }
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['id', 'savedAt', 'date', 'meal', 'totalCarbs', 'sheet', 'foods']);
+  // Also upgrades a log that predates the rowNum and status columns. Rows without a status count as done.
+  const headerRange = sheet.getRange(1, 1, 1, LOG_HEADERS.length);
+  if (String(headerRange.getValues()[0][LOG_STATUS_COL_NUM - 1]) !== LOG_HEADERS[LOG_STATUS_COL_NUM - 1]) {
+    headerRange.setValues([LOG_HEADERS]);
   }
   return sheet;
 }
 
-function isAlreadyLogged_(logSheet, id) {
+/** Row number of the log entry for `id`, or 0. */
+function findLogRowNum_(logSheet, id) {
   const lastRowNum = logSheet.getLastRow();
-  if (lastRowNum < 2) return false;
+  if (lastRowNum < 2) return 0;
   const idsArr = logSheet.getRange(2, 1, lastRowNum - 1, 1).getValues().map((row) => String(row[0]));
-  return idsArr.indexOf(id) >= 0;
+  const idx = idsArr.indexOf(id);
+  return (idx < 0) ? 0 : idx + 2;
+}
+
+/** True when the rows starting at `rowNum` hold this meal: the meal type on the first row and the same food names in order. */
+function isMealAtRow_(sheet, rowNum, mealName, foodsArr) {
+  if (rowNum + foodsArr.length - 1 > sheet.getMaxRows()) return false;
+  const valuesAoa = sheet.getRange(rowNum, 2, foodsArr.length, 2).getValues();
+  if (String(valuesAoa[0][0]).trim() !== mealName) return false;
+  return foodsArr.every((food, i) => String(valuesAoa[i][1]).trim() === String(food.name).trim());
 }
 
 // --- One-off helpers to run from the editor ---

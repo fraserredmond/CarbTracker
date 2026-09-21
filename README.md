@@ -28,7 +28,7 @@ A small PWA that logs a meal's foods and carbs into the "Beths carbs" Google She
 4. Deploy > New deployment > type "Web app". Execute as: Me. Who has access: Anyone. Copy the web app URL (ends in `/exec`).
 5. Optional: run `addSnackToMealDropdowns` once from the editor so Snack rows don't get a validation warning. Run `debugFetch` to see what the app will receive.
 
-Every later change to `Code.gs` needs Deploy > Manage deployments > edit > new version, or the URL keeps serving the old code.
+Every later change to `Code.gs` needs Deploy > Manage deployments > edit > new version, or the URL keeps serving the old code. The app and `Code.gs` stay compatible across versions in both directions, so the order you update them in doesn't matter.
 
 ### 2. The app
 

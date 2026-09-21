@@ -11,12 +11,14 @@ function lsGet(key, fallbackMixed) {
   }
 }
 
+/** @returns {boolean} false when the write didn't happen (private mode, full storage). */
 function lsSet(key, valueMixed) {
   try {
     if (valueMixed === null || valueMixed === undefined) localStorage.removeItem(PREFIX + key);
     else localStorage.setItem(PREFIX + key, JSON.stringify(valueMixed));
+    return true;
   } catch {
-    // Private mode or full storage: the app still works for this session.
+    return false;
   }
 }
 
@@ -74,6 +76,7 @@ function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
+    req.onblocked = () => reject(new Error(`IndexedDB open blocked`));
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -83,6 +86,8 @@ function openDb() {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+  // A failed open isn't remembered, so the next call gets a fresh try.
+  dbPromise.catch(() => { dbPromise = null; });
   return dbPromise;
 }
 
@@ -97,16 +102,44 @@ function tx(mode, workFunc) {
   }));
 }
 
+// When IndexedDB can't be used (some private modes, storage trouble), queued meals live in localStorage instead.
+// The two stores are read together, so a record is found wherever it landed.
+const FALLBACK_KEY = `queueFallback`;
+const fallbackAll = () => lsGet(FALLBACK_KEY, []);
+
 /** @returns {Promise<Array<object>>} oldest first */
 export async function queueAll() {
-  const recordsArr = await tx(`readonly`, (store) => store.getAll());
-  return (recordsArr ?? []).sort((a, b) => a.createdAt - b.createdAt);
+  let recordsArr = [];
+  try {
+    recordsArr = (await tx(`readonly`, (store) => store.getAll())) ?? [];
+  } catch {
+    recordsArr = [];
+  }
+  return [...recordsArr, ...fallbackAll()].sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export function queuePut(recordObj) {
-  return tx(`readwrite`, (store) => store.put(recordObj));
+/** Rejects only when neither store would take the record. */
+export async function queuePut(recordObj) {
+  const fallbackArr = fallbackAll();
+  const isInFallback = fallbackArr.some((row) => row.id === recordObj.id);
+  if (!isInFallback) {
+    try {
+      await tx(`readwrite`, (store) => store.put(recordObj));
+      return;
+    } catch {
+      // Fall through to localStorage.
+    }
+  }
+  const nextArr = [...fallbackArr.filter((row) => row.id !== recordObj.id), recordObj];
+  if (!lsSet(FALLBACK_KEY, nextArr)) throw new Error(`No storage available for the queue`);
 }
 
-export function queueDelete(id) {
-  return tx(`readwrite`, (store) => store.delete(id));
+export async function queueDelete(id) {
+  const fallbackArr = fallbackAll();
+  if (fallbackArr.some((row) => row.id === id)) lsSet(FALLBACK_KEY, fallbackArr.filter((row) => row.id !== id));
+  try {
+    await tx(`readwrite`, (store) => store.delete(id));
+  } catch {
+    // Nothing to delete from a store that can't be opened.
+  }
 }

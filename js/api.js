@@ -62,9 +62,12 @@ export function fetchPayload(settings) {
   return callWebApp(settings, `fetch`, { date: toYmd(new Date()) });
 }
 
-/** @param {object} settings @param {object} mealObj */
-export function saveMeal(settings, mealObj) {
-  return callWebApp(settings, `save`, { meal: mealObj });
+/**
+ * `isDevMode` is the mode the meal was saved under, which can differ from the current setting by the time a queued meal is sent.
+ * @param {object} settings @param {object} mealObj @param {boolean} isDevMode
+ */
+export function saveMeal(settings, mealObj, isDevMode) {
+  return callWebApp({ ...settings, isDevMode }, `save`, { meal: mealObj });
 }
 
 // --- Mock mode: webAppUrl === "mock". Mirrors the real Templates sheet. ---

@@ -17,12 +17,12 @@ A PWA for logging a meal's foods and carbs into the "Beths carbs" Google Sheet. 
 - Column B validation list is `Breakfast,Lunch,Dinner`. Snack gets added to that list on `Testing`, `Oct 2026`, `Nov 2026`, `Dec 2026`. Fraser adds it to whatever future months are copied from.
 - `Templates` sheet is parsed as-is: column A labels start sections (`Others` = favourites, `Breakfast`, `Lunch`, `Dinner`); each food row has a name in B and either Carbs in C or Carbs/100g in D. Named ranges and `onEdit` keep working for hand entry.
 - `Testing` is a copy of a month sheet used when dev mode is on.
-- `AppLog` sheet: `id | savedAt | date | meal | totalCarbs | sheet | foods`. One row per accepted save. A repeated id returns success without writing again.
+- `AppLog` sheet: `id | savedAt | date | meal | totalCarbs | sheet | foods | rowNum | status`. The row is logged as `writing` before the month sheet is touched and flipped to `done` after. A repeated id that's `done` returns success without writing again. A repeated id still marked `writing` means the earlier attempt was interrupted: the web app checks whether the rows landed at the logged row, and only writes again if they didn't.
 - Blood and bolus are out of scope entirely. Columns I and J are never touched.
 
 ## API (web app)
 
-Every request carries the secret (stored in Script Properties) and, in dev mode, `sheet: "Testing"`. Wrong secret returns a JSON error the app shows as a toast pointing at settings.
+Every request carries the secret (stored in Script Properties) and, in dev mode, `sheet: "Testing"`. A meal remembers the mode it was saved under, so a queued meal goes to the sheet it was meant for even if dev mode is toggled before it syncs. Wrong secret returns a JSON error the app shows as a toast pointing at settings.
 
 - `GET` returns one JSON payload: templates per meal, favourites, list of sheet names, last saved meal (from the current month's sheet, falling back to the previous month; `Testing` only in dev mode), and the spreadsheet URL.
 - `POST` appends one meal: `{ id, date: "YYYY-MM-DD", meal, foods: [{ name, carbs?, carbsPer100g?, weightG? }] }`. Sent as `text/plain` JSON with `redirect: "follow"` to avoid CORS preflight and the Apps Script POST redirect.
@@ -48,15 +48,16 @@ Meal screen:
 - Enter / Next moves to the next field on the row, then the next row's name.
 - On focus and on `visualViewport` resize, the focused row scrolls into view; the trailing blank row is kept visible too when there's room.
 - Save needs at least one named row; numbers may be blank. Save queues the meal, returns home, shows the new total. Cancel returns home and clears the draft.
-- Draft is saved to localStorage as you type. Tapping the same meal type on the same day restores it, with a "Start over" link that reloads the template.
+- Draft is saved to localStorage as you type. Tapping the same meal type on the same day restores it, with a "Start over" link that reloads the template. There's one draft slot: typing in a different meal type replaces it.
 
 Settings popup (a `<dialog>`): font size toggle (two root sizes, ~16px and ~20px), background colour (cycle of 10 pastels, darkened variants in dark mode), theme (dark / light / auto via `prefers-color-scheme`), web app URL, secret, dev mode toggle. Saving runs a test `GET` and shows tick or cross.
 
 ## Offline and sync
 
-- Settings, theme, colour, font, draft, and the cached `GET` payload live in localStorage. Unsent meals live in IndexedDB, one record per meal with a client-generated id.
-- Sync runs on app open, on the browser `online` event, and right after each save. No Background Sync API.
-- Service worker precaches the app shell so it opens offline.
+- Settings, theme, colour, font, draft, and the cached `GET` payload live in localStorage. Unsent meals live in IndexedDB, one record per meal with a client-generated id. If IndexedDB can't be used, the queue falls back to localStorage so saving still works.
+- Sync runs on app open, on the browser `online` event, and right after each save. A sync requested while one is running reruns straight after. A failed sync retries with a backoff from 15 seconds up to 10 minutes. No Background Sync API.
+- Meals are sent oldest first and a failure stops the run, so order is kept. A meal the web app itself keeps rejecting is dropped once it's 20 hours old so it can't block later meals. Connection, secret, and missing-month-sheet failures never cause a drop.
+- Service worker precaches the app shell so it opens offline. Online it's network-first, falling back to the cache if the network fails or hasn't answered in 3 seconds. After a timeout it serves cached files immediately for 30 seconds, so a slow connection costs one 3-second wait per launch rather than one per file.
 
 ## Misc
 

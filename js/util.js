@@ -70,11 +70,32 @@ export function uid() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** @param {Function} func @param {number} waitMs */
+/**
+ * The returned function also has `cancel()` (drop a pending call) and `flush()` (run a pending call now).
+ * @param {Function} func @param {number} waitMs
+ */
 export function debounce(func, waitMs) {
   let timeout = 0;
-  return (...argsArr) => {
-    window.clearTimeout(timeout);
-    timeout = window.setTimeout(() => func(...argsArr), waitMs);
+  let pendingArgsArr = null;
+  const run = () => {
+    const argsArr = pendingArgsArr;
+    pendingArgsArr = null;
+    timeout = 0;
+    if (argsArr) func(...argsArr);
   };
+  const debounced = (...argsArr) => {
+    pendingArgsArr = argsArr;
+    window.clearTimeout(timeout);
+    timeout = window.setTimeout(run, waitMs);
+  };
+  debounced.cancel = () => {
+    window.clearTimeout(timeout);
+    timeout = 0;
+    pendingArgsArr = null;
+  };
+  debounced.flush = () => {
+    window.clearTimeout(timeout);
+    run();
+  };
+  return debounced;
 }
