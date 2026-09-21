@@ -69,7 +69,11 @@
       </section>
 
       <section class="settingsGroup">
-        <h3>Spreadsheet connection</h3>
+        <div class="settingsGroupHead">
+          <h3>Spreadsheet connection</h3>
+          <button id="connectionToggleBtn" class="btn" type="button" aria-expanded="false" aria-controls="connectionFields">Show</button>
+        </div>
+        <div id="connectionFields" hidden>
         <label class="field">
           <span>Web app URL</span>
           <input id="webAppUrlInput" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
@@ -85,6 +89,7 @@
         <div class="settingsActions">
           <button id="settingsSaveBtn" class="btn btnPrimary" type="button">Save and test</button>
           <span id="settingsTestResult" class="testResult"></span>
+        </div>
         </div>
       </section>
     </form>

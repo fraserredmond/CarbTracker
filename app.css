@@ -43,6 +43,9 @@
 
 * { box-sizing: border-box; }
 
+/* Classes that set `display` would otherwise beat the hidden attribute. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   background-color: var(--bg);
@@ -212,8 +215,8 @@ body { line-height: 1.35; }
 }
 
 .mealBtn.isSuggested { border-color: var(--accent); }
-.home.hasSuggestion .mealBtn:not(.isSuggested):not(.isSnack) { opacity: 0.55; }
-.mealBtn.isSnack { font-size: 1.05rem; padding: 0.7em 1em; align-self: center; min-width: 45%; opacity: 0.8; }
+.mealBtn:not(.isSuggested) { opacity: 0.4; }
+.mealBtn.isSnack { font-size: 1.05rem; padding: 0.7em 1em; align-self: center; min-width: 45%; }
 .mealBtn:active { filter: brightness(0.95); }
 
 /* Meal entry */
@@ -346,6 +349,9 @@ body { line-height: 1.35; }
 .dialogForm { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 14px; overflow-x: hidden; }
 .dialogHead { display: flex; align-items: center; justify-content: space-between; }
 .dialogHead h2 { margin: 0; font-size: 1.3rem; }
+.settingsGroupHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.settingsGroupHead h3 { margin: 0; }
+.settingsGroupHead .btn { font-size: 0.85rem; padding: 0.3em 0.8em; }
 .settingsGroup h3 { margin: 0 0 6px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 
 .choices { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -379,6 +385,7 @@ body { line-height: 1.35; }
 .checkField { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
 .checkField input { width: 1.2em; height: 1.2em; flex: none; }
 .settingsActions { display: flex; align-items: center; gap: 10px; }
-.testResult { font-size: 0.9rem; color: var(--muted); }
+.testResult { font-size: 0.9rem; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.testResult svg { width: 1.1em; height: 1.1em; flex: none; }
 .testResult.isOk { color: hsl(140 60% 35%); }
 .testResult.isError { color: var(--danger); }

@@ -1,6 +1,6 @@
 // App-shell cache. Fresh files are fetched whenever online; bump CACHE_VERSION on release to drop stale entries.
 
-const CACHE_VERSION = `ct-v1`;
+const CACHE_VERSION = `ct-v2`;
 const SHELL_FILES = [
   `./`,
   `./index.html`,

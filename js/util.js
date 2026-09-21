@@ -6,7 +6,7 @@ export const MEAL_NAMES = [`Breakfast`, `Lunch`, `Dinner`, `Snack`];
 
 /** @param {Date} date */
 export function formatHeaderDate(date) {
-  return `${DAY_NAMES[date.getDay()]}, ${date.getDate()} ${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
+  return `${DAY_NAMES[date.getDay()]}, ${date.getDate()} ${MONTH_NAMES[date.getMonth()]}`;
 }
 
 /** @param {Date} date */

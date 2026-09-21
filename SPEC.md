@@ -32,7 +32,7 @@ Every request carries the secret (stored in Script Properties) and, in dev mode,
 
 Shared chrome on every screen:
 
-- Top line: spreadsheet link (icon, opens in a new tab, disabled until the first successful fetch) on the left, the date in the middle as `Sat, 19 Sep 2026` from the device clock, a settings cog on the right. "DEV" badge in the header when dev mode is on.
+- Top line: spreadsheet link (icon, opens in a new tab, disabled until the first successful fetch) on the left, the date in the middle as `Sat, 19 Sep` from the device clock, a settings cog on the right. "DEV" badge in the header when dev mode is on.
 - Directly under it, a fixed bar with the meal type and total carbs in the same position on both screens. Home: last saved meal's type and total, plus a status word ("syncing", "queued") when relevant. Meal screen: the current meal's type and running total, plus Cancel and Save. Anchored to the top so the keyboard never hides or moves it.
 - Banners: red if the current month's sheet is missing, yellow if it's after the 20th and next month's is missing. Neither blocks saving. Off in dev mode.
 

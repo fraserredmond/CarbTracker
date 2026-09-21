@@ -29,6 +29,7 @@ const els = {
   colorChoices: el(`colorChoices`), themeChoices: el(`themeChoices`), webAppUrlInput: el(`webAppUrlInput`),
   secretInput: el(`secretInput`), devModeInput: el(`devModeInput`), settingsSaveBtn: el(`settingsSaveBtn`),
   settingsTestResult: el(`settingsTestResult`), rowTpl: el(`rowTpl`),
+  connectionToggleBtn: el(`connectionToggleBtn`), connectionFields: el(`connectionFields`),
 };
 
 const blankRow = () => ({ name: ``, carbs: ``, carbsPer100g: ``, weightG: `` });
@@ -303,7 +304,9 @@ function buildRowEl(row) {
       liEl.innerHTML = `<span></span><small></small>`;
       liEl.firstElementChild.textContent = fav.name;
       liEl.lastElementChild.textContent = hintStr;
-      liEl.addEventListener(`pointerdown`, (evt) => { evt.preventDefault(); pickFav(fav); });
+      // mousedown only fires for a real tap or click, never for a scroll gesture. Cancelling it keeps the name focused.
+      liEl.addEventListener(`mousedown`, (evt) => evt.preventDefault());
+      liEl.addEventListener(`click`, () => pickFav(fav));
       favsEl.append(liEl);
     }
     favsEl.hidden = matchesArr.length === 0;
@@ -462,9 +465,18 @@ function openSettings() {
   els.devModeInput.checked = state.settings.isDevMode;
   els.settingsTestResult.textContent = ``;
   els.settingsTestResult.className = `testResult`;
+  setConnectionExpanded(!state.settings.webAppUrl);
   reflectSettingsChoices();
   els.dialog.showModal();
 }
+
+function setConnectionExpanded(isExpanded) {
+  els.connectionFields.hidden = !isExpanded;
+  els.connectionToggleBtn.textContent = isExpanded ? `Hide` : `Show`;
+  els.connectionToggleBtn.setAttribute(`aria-expanded`, String(isExpanded));
+}
+
+let settingsCloseTimeout = 0;
 
 async function saveConnectionSettings() {
   state.settings = {
@@ -484,6 +496,8 @@ async function saveConnectionSettings() {
     els.settingsTestResult.innerHTML = `${ICONS.check} Connected`;
     els.settingsTestResult.className = `testResult isOk`;
     sync();
+    window.clearTimeout(settingsCloseTimeout);
+    settingsCloseTimeout = window.setTimeout(() => { if (els.dialog.open) els.dialog.close(); }, 2000);
   } catch (err) {
     const code = (err instanceof ApiError) ? err.code : `NETWORK`;
     els.settingsTestResult.textContent = ERROR_MESSAGES[code] ?? `Failed: ${code}`;
@@ -529,6 +543,8 @@ async function init() {
 
   els.settingsBtn.addEventListener(`click`, openSettings);
   els.settingsSaveBtn.addEventListener(`click`, saveConnectionSettings);
+  els.connectionToggleBtn.addEventListener(`click`, () => setConnectionExpanded(els.connectionFields.hidden));
+  els.dialog.addEventListener(`close`, () => window.clearTimeout(settingsCloseTimeout));
   els.cancelBtn.addEventListener(`click`, () => goHome(true));
   els.saveBtn.addEventListener(`click`, saveCurrentMeal);
   window.addEventListener(`popstate`, () => { if (state.screen === `meal`) renderHome(); });

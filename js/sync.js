@@ -1,7 +1,7 @@
 // Pushes queued meals to the web app, oldest first, then refreshes the cached payload.
 
 import { fetchPayload, saveMeal, ApiError } from './api.js';
-import { getSettings, queueAll, queueDelete, queuePut, setPayload } from './store.js';
+import { getPayload, getSettings, queueAll, queueDelete, queuePut, setPayload } from './store.js';
 
 export const syncEvents = new EventTarget();
 let isSyncing = false;
@@ -53,6 +53,12 @@ export async function sync() {
           foods: recordObj.foods,
         });
         await queueDelete(recordObj.id);
+        // Until the refresh below returns, the cached payload still names the previous meal. Patch it now.
+        const cachedPayload = getPayload();
+        if (cachedPayload) {
+          cachedPayload.lastMeal = { date: recordObj.date, meal: recordObj.meal, totalCarbs: recordObj.totalCarbs };
+          setPayload(cachedPayload);
+        }
         savedCount++;
         lastErrorCode = ``;
         emit(`queue`);
