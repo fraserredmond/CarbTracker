@@ -1,6 +1,6 @@
 // App-shell cache. Fresh files are fetched whenever online; bump CACHE_VERSION on release to drop stale entries.
 
-const CACHE_VERSION = `ct-v4`;
+const CACHE_VERSION = `ct-v5`;
 const NETWORK_TIMEOUT_MS = 3000;
 const FRESH_PAGE_SUBRESOURCE_TIMEOUT_MS = 10000;
 const SLOW_NETWORK_MEMORY_MS = 30000;

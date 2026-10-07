@@ -9,6 +9,13 @@ export function formatHeaderDate(date) {
   return `${DAY_NAMES[date.getDay()]}, ${date.getDate()} ${MONTH_NAMES[date.getMonth()]}`;
 }
 
+/** UK 12-hour time, e.g. "2:35pm". @param {Date} date */
+export function formatTime(date) {
+  const hourNum = date.getHours();
+  const minsStr = String(date.getMinutes()).padStart(2, `0`);
+  return `${(hourNum % 12) || 12}:${minsStr}${(hourNum < 12) ? `am` : `pm`}`;
+}
+
 /** @param {Date} date */
 export function toYmd(date) {
   const pad = (n) => String(n).padStart(2, `0`);

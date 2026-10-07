@@ -48,6 +48,15 @@ export function setPayload(payloadObj) {
   lsSet(`payload`, payloadObj);
 }
 
+/** When the newest meal was saved, with enough of the meal to tell it's the one the bar shows. */
+export function getLastSave() {
+  return lsGet(`lastSave`, null);
+}
+
+export function setLastSave(lastSaveObj) {
+  lsSet(`lastSave`, lastSaveObj);
+}
+
 /** In-progress meal so a lock screen doesn't lose it. */
 export function getDraft() {
   return lsGet(`draft`, null);

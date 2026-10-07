@@ -2,11 +2,13 @@
 
 import { ApiError, ERROR_MESSAGES, fetchPayload, foodToRow } from './api.js';
 import { ICONS } from './icons.js';
-import { getDraft, getPayload, getSettings, queueAll, queuePut, setDraft, setSettings } from './store.js';
+import {
+  getDraft, getLastSave, getPayload, getSettings, queueAll, queuePut, setDraft, setLastSave, setSettings,
+} from './store.js';
 import { getSyncState, installSyncTriggers, refreshPayload, sync, syncEvents } from './sync.js';
 import { COLOR_HUES, applyTheme, followSystemTheme } from './theme.js';
 import {
-  MEAL_NAMES, debounce, firstOfNextMonth, formatCarbs, formatHeaderDate, parseNum, rowCarbs,
+  MEAL_NAMES, debounce, firstOfNextMonth, formatCarbs, formatHeaderDate, formatTime, parseNum, rowCarbs,
   sheetNameFor, suggestedMeal, toYmd, totalCarbs, uid,
 } from './util.js';
 
@@ -72,7 +74,12 @@ function renderBar() {
     else if (!navigator.onLine) statusStr = `offline, queued${countStr}`;
     else statusStr = `queued${countStr}`;
   } else if (lastMeal) {
-    statusStr = `last meal`;
+    const lastSave = getLastSave();
+    const isLastSaveShown = lastSave
+      && lastSave.date === lastMeal.date
+      && lastSave.meal === lastMeal.meal
+      && Boolean(lastSave.isDevMode) === Boolean(state.settings.isDevMode);
+    statusStr = isLastSaveShown ? formatTime(new Date(lastSave.createdAt)) : `Last meal`;
   }
   els.barStatus.textContent = statusStr;
   els.barStatus.classList.toggle(`isError`, state.queueArr.length > 0 && !isSyncing && navigator.onLine);
@@ -427,6 +434,7 @@ async function queueCurrentMeal(namedRowsArr) {
     isDevMode: state.settings.isDevMode,
   };
   await queuePut(recordObj);
+  setLastSave({ createdAt: recordObj.createdAt, date: recordObj.date, meal: recordObj.meal, isDevMode: recordObj.isDevMode });
   state.queueArr = await queueAll();
   goHome(true);
   sync();
